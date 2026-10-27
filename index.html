@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="An interactive explorer connecting mutual information, pointwise information, and conditional distributions."
+    />
+    <title>Mutual Information Explorer</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#explorer">Skip to the explorer</a>
+    <main>
+      <header class="page-header">
+        <div>
+          <p class="kicker">A visual probability atlas</p>
+          <h1>Mutual Information Explorer</h1>
+        </div>
+        <p class="intro">
+          Dependence has two views: a joint distribution departs from independence, and an observation
+          updates what we expect. Select or drag a point to see both views meet.
+        </p>
+      </header>
+
+      <section id="explorer" class="explorer" aria-label="Interactive mutual information explorer">
+        <div class="control-bench">
+          <div class="family-control">
+            <label for="family-select">Distribution family</label>
+            <div class="select-wrap">
+              <select id="family-select"></select>
+            </div>
+          </div>
+          <div id="parameter-controls" class="parameter-controls"></div>
+          <div class="family-copy" aria-live="polite">
+            <p id="family-description"></p>
+            <p id="family-lesson"></p>
+            <p id="family-source" hidden></p>
+          </div>
+        </div>
+
+        <div class="atlas-heading">
+          <div>
+            <h2>Joint, independent reference, and local evidence</h2>
+            <p>All three fields share the same coordinates. Density colors share the same scale.</p>
+          </div>
+          <div class="global-metric">
+            <span>Global average</span>
+            <strong><i>I</i>(X;Y) = <span id="mutual-information">0.000</span> bits</strong>
+          </div>
+        </div>
+
+        <div class="heatmap-triptych">
+          <article class="heatmap-panel density-panel joint-panel">
+            <header>
+              <div>
+                <h3>Observed joint</h3>
+                <p><i>p</i>(x,y)</p>
+              </div>
+              <div class="slice-key" aria-label="Selected conditional slices and KL divergences">
+                <span class="x-slice-key">
+                  <i class="line-key"></i><i>p</i>(x|y₀)
+                  <small>D<sub>KL</sub> <span id="kl-x">—</span> bits</small>
+                </span>
+                <span class="y-slice-key">
+                  <i class="line-key"></i><i>p</i>(y|x₀)
+                  <small>D<sub>KL</sub> <span id="kl-y">—</span> bits</small>
+                </span>
+              </div>
+            </header>
+            <div class="density-coordinate-frame">
+              <div id="joint-x-projection" class="projection projection-top"></div>
+              <div class="projection-corner" aria-hidden="true">density</div>
+              <div id="joint-heatmap"></div>
+              <div id="joint-y-projection" class="projection projection-right"></div>
+            </div>
+          </article>
+          <article class="heatmap-panel density-panel product-panel">
+            <header>
+              <div>
+                <h3>Independent reference</h3>
+                <p><i>p</i>(x)<i>p</i>(y)</p>
+              </div>
+            </header>
+            <div class="density-coordinate-frame">
+              <div id="product-x-projection" class="projection projection-top"></div>
+              <div class="projection-corner" aria-hidden="true">density</div>
+              <div id="product-heatmap"></div>
+              <div id="product-y-projection" class="projection projection-right"></div>
+            </div>
+          </article>
+          <article class="heatmap-panel information-panel">
+            <header>
+              <div>
+                <h3>Pointwise information</h3>
+                <p id="information-formula"><i>i</i>(x;y) = log₂ <i>p</i>(x,y) / [<i>p</i>(x)<i>p</i>(y)]</p>
+              </div>
+              <label class="information-weight-toggle" for="weight-information">
+                <input id="weight-information" type="checkbox" />
+                <span>Weight by <i>p</i>(x,y)</span>
+              </label>
+            </header>
+            <div id="information-heatmap"></div>
+          </article>
+        </div>
+
+        <div class="legend-rail" aria-label="Heatmap legends">
+          <div class="legend-block">
+            <div class="legend-labels">
+              <span>Density · 0</span>
+              <span id="density-maximum">maximum</span>
+            </div>
+            <div class="color-bar density-bar"></div>
+            <p>One linear scale for both density fields.</p>
+          </div>
+          <div class="legend-block">
+            <div class="legend-labels">
+              <span id="information-legend-min">≤ −4 bits</span><span>0</span><span id="information-legend-max">≥ +4 bits</span>
+            </div>
+            <div class="color-bar information-bar"></div>
+            <p id="information-legend-note">Display clips at ±4 bits. Color fades from 10⁻⁴ to 10⁻³ of peak joint density.</p>
+          </div>
+        </div>
+
+        <section class="point-readout" aria-labelledby="selected-point-heading">
+          <div class="point-readout-title">
+            <h2 id="selected-point-heading">Selected point</h2>
+            <p>Uncapped numerical values</p>
+          </div>
+          <dl>
+            <div><dt id="selected-x-label">x₀</dt><dd id="selected-x">0.000</dd></div>
+            <div><dt id="selected-y-label">y₀</dt><dd id="selected-y">0.000</dd></div>
+            <div><dt><i>p</i>(x₀,y₀) density</dt><dd id="selected-joint">—</dd></div>
+            <div><dt><i>p</i>(x₀)<i>p</i>(y₀) density product</dt><dd id="selected-product">—</dd></div>
+            <div class="information-readout"><dt id="selected-information-label"><i>i</i>(x₀;y₀)</dt><dd><span id="selected-information">—</span> <span id="selected-information-unit">bits</span></dd></div>
+          </dl>
+        </section>
+
+        <details class="math-help">
+          <summary>How the five views connect</summary>
+          <div class="help-grid">
+            <div>
+              <h3>Local evidence</h3>
+              <p>
+                <i>i</i>(x;y) = log₂[<i>p</i>(x,y) / (<i>p</i>(x)<i>p</i>(y))]. A positive value
+                favors the observed joint over independence; a pointwise value can be negative. Weighting the
+                map shows <i>p</i>(x,y)<i>i</i>(x;y), whose integral is mutual information.
+              </p>
+            </div>
+            <div>
+              <h3>A selected slice</h3>
+              <p>
+                D<sub>KL</sub>(<i>p</i>(X|y₀) || <i>p</i>(X)) averages the pointwise information
+                along one slice. KL divergence cannot be negative, and one selected slice may exceed the global average.
+              </p>
+            </div>
+            <div>
+              <h3>The global average</h3>
+              <p>
+                <i>I</i>(X;Y) = ∬ <i>p</i>(x,y)<i>i</i>(x;y) dx dy = ∫ <i>p</i>(y)
+                D<sub>KL</sub>(<i>p</i>(X|y) || <i>p</i>(X)) dy.
+              </p>
+            </div>
+          </div>
+          <p id="method-note" class="method-note">
+            The page uses a normalized 384 × 384 cell-centered grid over a finite window. Infinite tails are
+            truncated at six noise standard deviations. Fading and color saturation affect only the display,
+            never the integrals.
+          </p>
+        </details>
+        <p id="calculation-status" class="sr-only" aria-live="polite"></p>
+      </section>
+    </main>
+    <footer>
+      <p>Deterministic quadrature · information measured in bits · static hosting only</p>
+    </footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
