@@ -62,3 +62,7 @@ The check covers the five analytic families plus Height vs Weight and Niño 3.4 
 ## Interaction
 
 Click or drag on any heatmap to update the shared selected point. Pointer capture supports mouse, pen, and touch. Once focused, a heatmap also accepts arrow keys for one-grid-cell movement and Shift+arrow for ten cells. Ordinary hover does not move the selection.
+
+## License
+
+This project is released under the [MIT License](LICENSE).
