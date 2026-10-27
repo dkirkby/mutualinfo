@@ -45,8 +45,12 @@
             <p>All three fields share the same coordinates. Density colors share the same scale.</p>
           </div>
           <div class="global-metric">
-            <span>Global average</span>
+            <span class="global-metric-label">Global information</span>
             <strong><i>I</i>(X;Y) = <span id="mutual-information">0.000</span> bits</strong>
+            <div class="entropy-metrics" aria-label="Marginal grid entropies">
+              <span><i>H</i>(X) = <i>I</i>(X;X) = <b id="entropy-x">0.000</b> bits</span>
+              <span><i>H</i>(Y) = <i>I</i>(Y;Y) = <b id="entropy-y">0.000</b> bits</span>
+            </div>
           </div>
         </div>
 
@@ -93,14 +97,19 @@
             <header>
               <div>
                 <h3>Pointwise information</h3>
-                <p id="information-formula"><i>i</i>(x;y) = log₂ <i>p</i>(x,y) / [<i>p</i>(x)<i>p</i>(y)]</p>
+                <p id="information-formula"><i>p</i>(x,y)<i>i</i>(x;y)</p>
               </div>
               <label class="information-weight-toggle" for="weight-information">
-                <input id="weight-information" type="checkbox" />
-                <span>Weight by <i>p</i>(x,y)</span>
+                <input id="weight-information" type="checkbox" checked />
+                <span>weighted</span>
               </label>
             </header>
-            <div id="information-heatmap"></div>
+            <div class="density-coordinate-frame information-coordinate-frame">
+              <div id="information-x-profile" class="projection projection-top"></div>
+              <div id="information-profile-unit" class="projection-corner" aria-hidden="true">bits × marginal</div>
+              <div id="information-heatmap"></div>
+              <div id="information-y-profile" class="projection projection-right"></div>
+            </div>
           </article>
         </div>
 
@@ -152,6 +161,8 @@
               <p>
                 D<sub>KL</sub>(<i>p</i>(X|y₀) || <i>p</i>(X)) averages the pointwise information
                 along one slice. KL divergence cannot be negative, and one selected slice may exceed the global average.
+                The attached information-panel profiles show this KL value for every conditioning coordinate;
+                when weighted, they are multiplied by the corresponding marginal density.
               </p>
             </div>
             <div>
@@ -159,6 +170,9 @@
               <p>
                 <i>I</i>(X;Y) = ∬ <i>p</i>(x,y)<i>i</i>(x;y) dx dy = ∫ <i>p</i>(y)
                 D<sub>KL</sub>(<i>p</i>(X|y) || <i>p</i>(X)) dy.
+                The displayed <i>H</i>(X) and <i>H</i>(Y) are Shannon entropies of the finite grid-cell
+                variables, so <i>H</i>(X) = <i>I</i>(X;X) and <i>H</i>(Y) = <i>I</i>(Y;Y).
+                Their values depend on grid binning; mutual information does not in the continuum limit.
               </p>
             </div>
           </div>

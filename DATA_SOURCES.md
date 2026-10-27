@@ -28,7 +28,7 @@ This produces 5,120 adults after excluding 55 known pregnancies. Pregnancy statu
 
 Each retained record contributes its normalized `WTMEC2YR` survey weight to a 128 × 160 height–weight histogram. The source histogram spans 124–212 cm and 20–275 kg, containing every retained measurement and padding for the kernel tails. The browser smooths that histogram with a separable Gaussian kernel. At the default smoothing setting, the kernel standard deviations are 2.4 cm in height and 5.5 kg in weight. The smoothing slider scales both bandwidths together from 0.25 to 1.6; at its minimum the bandwidths are 0.60 cm and 1.38 kg, revealing distinct clouds around isolated occupied bins.
 
-The visible plot window uses the survey-weighted marginal 0.5th–99.5th percentiles: 145.1–192.8 cm for height and 44.7–164.2 kg for weight. These coordinates are converted for display to feet–inches (about 4′9.1″–6′3.9″) and pounds (98.5–362.0 lbs). The density is normalized on that percentile rectangle, while observations outside it still contribute kernel mass near its boundaries.
+The generated asset records the raw survey-weighted marginal 0.5th–99.5th percentiles—145.1–192.8 cm for height and 44.7–164.2 kg for weight—as transformation checks. At runtime, all panels use the corresponding 0.5th–99.5th percentiles of the currently smoothed density, converted to feet–inches and pounds. The complete 124–212 cm by 20–275 kg histogram domain is normalized and used for MI, conditional densities, and KL divergence; clipping affects only what is drawn.
 
 The weighted cohort means are 167.911 cm and 84.347 kg; the weighted Pearson correlation is 0.448. These are transformation checks, not population estimates with design-based confidence intervals. The explorer uses weights for density estimation but does not perform the stratified/clustered variance estimation required for formal NHANES inference.
 
@@ -67,7 +67,7 @@ X = Niño 3.4(t),    Y = SOI(t + τ).
 
 Thus positive `τ` means a later SOI value, negative `τ` means an earlier SOI value, and the available pair count is `1867 − |τ|`. The slider spans −12 to +12 months.
 
-Each lagged sample is deposited in a 128 × 128 histogram and smoothed with a separable Gaussian kernel whose fixed standard deviations are 0.18 °C for Niño 3.4 and 0.24 standardized SOI units. The visible axes stay fixed at the full-series marginal 0.5th–99.5th percentiles: −1.874–2.320 °C and −3.220–2.847 SOI. Values outside that display rectangle still contribute kernel mass near its boundaries. The density and every information quantity are recomputed deterministically when the lag changes.
+Each lagged sample is deposited in a 128 × 128 histogram and smoothed with a separable Gaussian kernel whose fixed standard deviations are 0.18 °C for Niño 3.4 and 0.24 standardized SOI units. The generated asset records the raw full-series marginal 0.5th–99.5th percentiles (−1.874–2.320 °C and −3.220–2.847 SOI) as checks. At runtime, all panels show the 0.5th–99.5th percentiles of the KDE for the selected lag. The full padded histogram domain remains in normalization and every information calculation. The density and every information quantity are recomputed deterministically when the lag changes.
 
 The source files used for the checked-in derived asset have these SHA-256 checksums:
 

@@ -16,8 +16,9 @@ This deliverable is the implementation plan. Building and deploying the webpage 
 - Three synchronized 2D heatmaps: p(x,y), p(x)p(y), and i(x;y).
 - Attach p(x) above and p(y) to the right of both density heatmaps. Around p(x,y), overlay p(x|y₀) and p(y|x₀); around p(x)p(y), show the marginals alone.
 - Click-to-position and drag-to-update in any heatmap, with synchronized crosshairs in all three. Preserve the selected point after release; ordinary hover does not move it. Support touch.
-- A diverging pointwise-information scale centered at zero, with a checkbox that switches to the joint-density-weighted contribution p(x,y)i(x;y). Information and KL values are in bits.
-- Show global mutual information and both conditional KL divergences.
+- A diverging pointwise-information scale centered at zero, with a `weighted` checkbox that switches to the joint-density-weighted contribution p(x,y)i(x;y). Attach the conditional-KL profile over x above this panel and the profile over y to its right; weight them by p(x) and p(y), respectively, with the same checkbox. Information and KL values are in bits.
+- Start with the correlated Gaussian selected and the information field weighted by p(x,y).
+- Show global mutual information, the marginal grid entropies H(X) = I(X;X) and H(Y) = I(Y;Y), and both conditional KL divergences.
 - Cap the displayed information color range and fade negligible-probability regions, while exposing the uncapped numerical value at the selected point.
 
 The defaults below are implementation choices, rather than additional requirements needing clarification.
@@ -26,14 +27,15 @@ The defaults below are implementation choices, rather than additional requiremen
 
 At desktop widths, place the selector and relevant sliders above three equally sized heatmap panels in one row. Compose each density panel as a coordinate frame with p(x) directly above its heatmap and p(y) directly to its right. Stack the three complete panels at narrow widths without detaching projections or removing any metric.
 
-- All heatmaps share x and y domains and orientation: x rightward, y upward.
+- All heatmaps and projections share marginal 0.5th–99.5th percentile display domains and orientation: x rightward, y upward. Retain both clipped tails in normalization and every information calculation.
 - Both density heatmaps use the same linear sequential color scale, including the same minimum and maximum. Compute their common maximum when parameters change and label the legend. Do not normalize their colors independently.
 - The information heatmap uses a perceptually balanced diverging scale with a fixed initial display range of −4 to +4 bits. Legend endpoints indicate saturation beyond that range. Color clipping never changes computed values.
 - Fade the information heatmap smoothly where p(x,y)/max p is below 10⁻⁴, with full opacity by 10⁻³. Label the convention in a compact legend/help note. Fading is only a display treatment, not an integration threshold.
 - When weighting is enabled, display p(x,y)i(x;y) with a symmetric current-data scale and no extra density fade. Its integral over the grid must equal I(X;Y).
-- Marginals use a neutral solid line. Give p(x|y₀) the same accent as the horizontal y=y₀ crosshair, and p(y|x₀) the same accent as the vertical x=x₀ crosshair.
-- For each coordinate, use one shared density scale across the joint and independent-reference projections, expanded as needed so a narrow conditional is never clipped. Avoid animation that makes dragging feel delayed.
-- Show I(X;Y) near the heatmaps; show D_KL(p(X|y₀)||p(X)) and D_KL(p(Y|x₀)||p(Y)) in the joint-panel slice key.
+- Attach K_Y(x) = D_KL[p(y|x)||p(y)] above the information heatmap and K_X(y) = D_KL[p(x|y)||p(x)] to its right. In weighted mode show p(x)K_Y(x) and p(y)K_X(y); each full-grid profile integrates to I(X;Y).
+- Draw marginals as translucent fills without outlines, using the density heatmaps' teal hue. Give p(x|y₀) the same accent as the horizontal y=y₀ crosshair, and p(y|x₀) the same accent as the vertical x=x₀ crosshair.
+- For each coordinate, precompute one shared density scale across the joint and independent-reference projections and hold it fixed while the crosshairs move. Cap the scale at three times the visible marginal peak so unusually sharp conditionals do not compress the marginal into the baseline. Omit over-limit conditional segments, leaving a visible gap rather than connecting or flattening them; clipping is display-only.
+- Show I(X;Y) near the heatmaps, with the smaller grid-cell entropy references H(X) = I(X;X) and H(Y) = I(Y;Y) beside it. Show D_KL(p(X|y₀)||p(X)) and D_KL(p(Y|x₀)||p(Y)) in the joint-panel slice key.
 - A compact selected-point readout shows x₀, y₀, p(x₀,y₀), p(x₀)p(y₀), and the field displayed by the information heatmap: i(x₀;y₀) or p(x₀,y₀)i(x₀;y₀).
 
 Include a short expandable explanation with the defining equations and the distinction between pointwise information, conditional KL, and mutual information. Explain that a pointwise value can be negative while the KL averages cannot.
@@ -49,14 +51,14 @@ Coordinates are dimensionless for the five analytic models. Height vs Weight dis
 | Noisy parabola | X uniform on [−1,1]; Y=aX²+η, η normal with standard deviation σ | a: 0–2 (1); σ: 0.08–0.6 (0.2) | Nonlinear dependence, zero covariance, and bimodal reverse conditionals |
 | Gaussian mixture | Equal mixture of N((−d,−d),s²I) and N((d,d),s²I) | d: 0–2 (1); s: 0.2–1 (0.4) | Observations change inferred cluster membership; d=0 is independent |
 | Noisy ring | Rotationally symmetric density proportional to exp[−(sqrt(x²+y²)−R)²/(2s²)] per unit Cartesian area | R: 0–2 (1); s: 0.1–0.6 (0.2) | Zero covariance with geometric dependence and two-lobed slices |
-| Height vs Weight | Survey-weighted Gaussian-kernel density of measured standing height and weight for 5,120 adults aged 20+ in NHANES 2017–2018, excluding known pregnancies. Axes span the weighted marginal 0.5th–99.5th percentiles. | joint KDE smoothing multiplier: 0.25–1.6 (1) | Real population heterogeneity produces a broad, asymmetric conditional update; low smoothing reveals isolated observations |
+| Height vs Weight | Survey-weighted Gaussian-kernel density of measured standing height and weight for 5,120 adults aged 20+ in NHANES 2017–2018, excluding known pregnancies. Axes span the smoothed marginal 0.5th–99.5th percentiles. | joint KDE smoothing multiplier: 0.25–1.6 (1) | Real population heterogeneity produces a broad, asymmetric conditional update; low smoothing reveals isolated observations |
 | Niño 3.4 vs SOI | Gaussian-kernel density of monthly HadISST Niño 3.4 SST anomaly at time `t` and CRU SOI at time `t + τ`, using the common NOAA PSL span from 1870-01 through 2025-07. | SOI lag `τ`: −12–+12 months (0) | Ocean and atmosphere are strongly associated with residual scatter; lagged MI is not evidence of causal direction |
 
 The ring definition is deliberate: it is an annular Cartesian density, not a Gaussian radius sampled uniformly in angle. The latter would require a radial Jacobian treatment and would be a different distribution. At R=0, this model becomes an independent isotropic Gaussian.
 
 The NHANES density is derived from the CDC/NCHS public-use `BMX_J` and `DEMO_J` files. Join on `SEQN`; require `RIDAGEYR >= 20`, valid `BMXHT`, `BMXWT`, and positive `WTMEC2YR`; and exclude records with `RIDEXPRG == 1`. Deposit normalized MEC examination weights into a 128×160 histogram, then apply a separable Gaussian kernel. Full provenance and rebuild instructions are in `DATA_SOURCES.md`.
 
-The climate density is derived from NOAA PSL's monthly HadISST Niño 3.4 anomaly and CRU SOI files. Align their valid common months, preserve the signed lag convention `Niño 3.4(t)` versus `SOI(t + τ)`, deposit each pairing into a 128×128 histogram, and apply a fixed separable Gaussian kernel. Keep axes fixed across lag values. Full provenance, checksums, bandwidths, and interpretation limits are in `DATA_SOURCES.md`.
+The climate density is derived from NOAA PSL's monthly HadISST Niño 3.4 anomaly and CRU SOI files. Align their valid common months, preserve the signed lag convention `Niño 3.4(t)` versus `SOI(t + τ)`, deposit each pairing into a 128×128 histogram, and apply a fixed separable Gaussian kernel. Recompute the shared percentile display axes when lag changes while retaining the full padded domain for calculations. Full provenance, checksums, bandwidths, and interpretation limits are in `DATA_SOURCES.md`.
 
 Preserve each family's slider settings when switching families. Initialize selection to the origin; preserve it across parameter edits when inside the new domain, otherwise clamp it. A selected point need not have high joint probability: such points can illustrate negative pointwise information.
 
@@ -70,6 +72,7 @@ All logarithms are base 2.
 - p(y|x₀) = p(x₀,y)/p(x₀), provided p(x₀)>0.
 - p(x|y₀) = p(x,y₀)/p(y₀), provided p(y₀)>0.
 - I(X;Y) = ∬ p(x,y)i(x;y) dx dy.
+- For grid-cell probabilities P_i = p(x_i)Δx and Q_j = p(y_j)Δy, H(X) = −Σ_i P_i log₂P_i = I(X;X), with the analogous identity for Y. These displayed grid entropies depend on resolution; do not label them as differential entropy.
 - K_Y(x₀) = ∫ p(y|x₀) log₂[p(y|x₀)/p(y)] dy.
 - K_X(y₀) = ∫ p(x|y₀) log₂[p(x|y₀)/p(x)] dx.
 - I(X;Y) = ∫ p(x)K_Y(x) dx = ∫ p(y)K_X(y) dy.
@@ -144,7 +147,7 @@ Use D3 directly for scales, axes, lines, and color interpolation; its lower-leve
 - Independent Gaussian gives matching p and q, overlapping marginal/conditional curves, and MI/KL near zero across slider settings.
 - Correlated Gaussian MI agrees with −½ log₂(1−ρ²); conditionals agree with normal mean ρx₀ and variance 1−ρ², within finite-window error.
 - Gaussian MI is unchanged when the sign of ρ changes.
-- MI agrees with both marginal-weighted averages of conditional KL. Use the full grid of slice values for this check, not only the selected point.
+- For every distribution family at representative parameters, the full-grid integral of p(x,y)i(x;y) and both marginal-weighted conditional-KL profiles agree with MI to 10 decimal places. Use the full grid, including display-clipped tails, not only the selected point.
 - Parabola and ring have approximately zero covariance but positive MI away from their independence limits.
 - Mixture d=0, parabola a=0, and ring R=0 recover independence.
 - Ordinary settings converge to within 0.002 bits when resolution doubles. Assess extreme settings too; refine resolution or reduce parameter ranges rather than displaying unjustified precision.
@@ -155,10 +158,11 @@ Use D3 directly for scales, axes, lines, and color interpolation; its lower-leve
 ### Interaction and presentation
 
 - Dragging any heatmap updates all crosshairs to identical coordinates and updates both attached conditional projections correctly.
-- The information checkbox switches between i(x;y) and p(x,y)i(x;y); the weighted field integrates to the displayed mutual information.
+- The information checkbox switches between i(x;y) and p(x,y)i(x;y), and between raw and marginal-weighted conditional-KL profiles; the weighted field and either weighted profile integrate to the displayed mutual information.
 - Changing only x₀ changes p(y|x₀) and K_Y, but not p(x|y₀) or K_X; changing only y₀ has the converse effect.
 - Global MI stays fixed while the point moves; both conditional KL values may vary.
 - Clicking positions the point, release preserves it, ordinary hover does not move it, and touch dragging works without unintended page scrolling inside the active plot.
 - Density panels use identical color limits. The information legend communicates whether the field is pointwise bits with clipping/fading or weighted contribution density with a dynamic symmetric scale.
+- Toggling `weighted` does not move any heatmap or attached profile frame vertically.
 - No curve, label, legend, or control is clipped on desktop or narrow mobile layouts.
 - Production build runs as a static site with no runtime server/API dependency.

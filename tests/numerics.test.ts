@@ -5,16 +5,15 @@ import {
   conditionalXAtY,
   conditionalYAtX,
   integrate,
+  MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO,
   weightedConditionalAverages,
 } from "../src/numerics";
 import { distributionById, type DistributionId, type Parameters } from "../src/distributions";
 import {
   NHANES_COHORT_SIZE,
   NHANES_EXCLUDED_KNOWN_PREGNANCIES,
-  NHANES_HEIGHT_P005_CM,
-  NHANES_HEIGHT_P995_CM,
-  NHANES_WEIGHT_P005_KG,
-  NHANES_WEIGHT_P995_KG,
+  NHANES_HEIGHT_DOMAIN,
+  NHANES_WEIGHT_DOMAIN,
 } from "../src/data/nhanesHeightWeight";
 import {
   NOAA_ENSO_END,
@@ -23,11 +22,28 @@ import {
   NOAA_NINO34_SOI_CORRELATION,
 } from "../src/data/noaaEnso";
 import { climateCorrelation, climatePairCount } from "../src/climate";
+import { createInitialState } from "../src/state";
 
 function model(id: DistributionId, parameters: Parameters, resolution = 256) {
   const definition = distributionById.get(id);
   if (!definition) throw new Error(`Unknown distribution: ${id}`);
   return computeGrid(definition, parameters, resolution);
+}
+
+function integrateInterval(
+  values: Float64Array,
+  calculationDomain: [number, number],
+  spacing: number,
+  interval: [number, number],
+): number {
+  let total = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    const cellMinimum = calculationDomain[0] + index * spacing;
+    const cellMaximum = cellMinimum + spacing;
+    const overlap = Math.max(0, Math.min(cellMaximum, interval[1]) - Math.max(cellMinimum, interval[0]));
+    total += values[index] * overlap;
+  }
+  return total;
 }
 
 describe("grid normalization", () => {
@@ -57,6 +73,32 @@ describe("grid normalization", () => {
     expect(ySlice.conditional).not.toBeNull();
     expect(integrate(xSlice.conditional ?? new Float64Array(), grid.dx)).toBeCloseTo(1, 11);
     expect(integrate(ySlice.conditional ?? new Float64Array(), grid.dy)).toBeCloseTo(1, 11);
+  });
+
+  it.each(cases)("shows the central 99%% of %s while retaining full-grid mass", (id, parameters) => {
+    const grid = model(id, parameters, 384);
+    expect(grid.displayDomain.x[0]).toBeGreaterThanOrEqual(grid.domain.x[0]);
+    expect(grid.displayDomain.x[1]).toBeLessThanOrEqual(grid.domain.x[1]);
+    expect(grid.displayDomain.y[0]).toBeGreaterThanOrEqual(grid.domain.y[0]);
+    expect(grid.displayDomain.y[1]).toBeLessThanOrEqual(grid.domain.y[1]);
+    expect(integrateInterval(grid.marginalX, grid.domain.x, grid.dx, grid.displayDomain.x)).toBeCloseTo(
+      0.99,
+      10,
+    );
+    expect(integrateInterval(grid.marginalY, grid.domain.y, grid.dy, grid.displayDomain.y)).toBeCloseTo(
+      0.99,
+      10,
+    );
+    expect(integrate(grid.marginalX, grid.dx)).toBeCloseTo(1, 11);
+    expect(integrate(grid.marginalY, grid.dy)).toBeCloseTo(1, 11);
+  });
+});
+
+describe("initial presentation state", () => {
+  it("starts with the correlated Gaussian and weighted information field", () => {
+    const state = createInitialState();
+    expect(state.family).toBe("correlated-gaussian");
+    expect(state.informationWeighted).toBe(true);
   });
 });
 
@@ -113,6 +155,55 @@ describe("correlated Gaussian", () => {
 });
 
 describe("information identities and geometry", () => {
+  const weightedPlotCases: [DistributionId, Parameters][] = [
+    ["independent-gaussian", { sigmaX: 0.5, sigmaY: 1.5 }],
+    ["correlated-gaussian", { rho: -0.9 }],
+    ["noisy-parabola", { a: 1.4, sigma: 0.12 }],
+    ["gaussian-mixture", { d: 1.2, s: 0.35 }],
+    ["noisy-ring", { R: 1.4, s: 0.15 }],
+    ["nhanes-adults", { smoothing: 1 }],
+    ["enso-lag", { lag: 0 }],
+  ];
+
+  it.each(weightedPlotCases)(
+    "makes the weighted 2D field and both weighted 1D profiles integrate to MI for %s",
+    (id, parameters) => {
+      const grid = model(id, parameters, 384);
+      let fieldIntegral = 0;
+      let xProfileIntegral = 0;
+      let yProfileIntegral = 0;
+      for (const contribution of grid.informationContribution) {
+        fieldIntegral += contribution * grid.dx * grid.dy;
+      }
+      for (let ix = 0; ix < grid.nx; ix += 1) {
+        xProfileIntegral += grid.marginalX[ix] * grid.klYGivenX[ix] * grid.dx;
+      }
+      for (let iy = 0; iy < grid.ny; iy += 1) {
+        yProfileIntegral += grid.marginalY[iy] * grid.klXGivenY[iy] * grid.dy;
+      }
+      expect(fieldIntegral).toBeCloseTo(grid.mutualInformation, 10);
+      expect(xProfileIntegral).toBeCloseTo(grid.mutualInformation, 10);
+      expect(yProfileIntegral).toBeCloseTo(grid.mutualInformation, 10);
+    },
+  );
+
+  it("computes marginal grid entropies as self-information", () => {
+    const grid = model("correlated-gaussian", { rho: 0.7 }, 384);
+    let selfInformationX = 0;
+    let selfInformationY = 0;
+    for (const density of grid.marginalX) {
+      const probability = density * grid.dx;
+      if (probability > 0) selfInformationX += probability * Math.log2(1 / probability);
+    }
+    for (const density of grid.marginalY) {
+      const probability = density * grid.dy;
+      if (probability > 0) selfInformationY += probability * Math.log2(1 / probability);
+    }
+    expect(grid.entropyX).toBeCloseTo(selfInformationX, 12);
+    expect(grid.entropyY).toBeCloseTo(selfInformationY, 12);
+    expect(grid.mutualInformation).toBeLessThanOrEqual(Math.min(grid.entropyX, grid.entropyY));
+  });
+
   it("integrates the joint-density-weighted pointwise field to mutual information", () => {
     const grid = model("correlated-gaussian", { rho: 0.7 }, 384);
     let integral = 0;
@@ -134,6 +225,76 @@ describe("information identities and geometry", () => {
     expect(averages.overY).toBeCloseTo(grid.mutualInformation, 10);
   });
 
+  it("precomputes the conditional-KL profiles shown around the information panel", () => {
+    const grid = model("gaussian-mixture", { d: 1.1, s: 0.45 }, 192);
+    expect(grid.klYGivenX).toHaveLength(grid.nx);
+    expect(grid.klXGivenY).toHaveLength(grid.ny);
+    expect(Array.from(grid.klYGivenX).every((value) => value >= 0)).toBe(true);
+    expect(Array.from(grid.klXGivenY).every((value) => value >= 0)).toBe(true);
+
+    for (const fraction of [0.2, 0.5, 0.8]) {
+      const ix = Math.floor(fraction * (grid.nx - 1));
+      const iy = Math.floor(fraction * (grid.ny - 1));
+      expect(grid.klYGivenX[ix]).toBeCloseTo(
+        conditionalYAtX(grid, grid.x[ix]).klDivergence ?? Number.NaN,
+        10,
+      );
+      expect(grid.klXGivenY[iy]).toBeCloseTo(
+        conditionalXAtY(grid, grid.y[iy]).klDivergence ?? Number.NaN,
+        10,
+      );
+    }
+  });
+
+  it("integrates either marginal-weighted KL profile to mutual information", () => {
+    const grid = model("correlated-gaussian", { rho: 0.7 }, 384);
+    const weightedOverX = Float64Array.from(
+      grid.klYGivenX,
+      (value, index) => value * grid.marginalX[index],
+    );
+    const weightedOverY = Float64Array.from(
+      grid.klXGivenY,
+      (value, index) => value * grid.marginalY[index],
+    );
+    expect(integrate(weightedOverX, grid.dx)).toBeCloseTo(grid.mutualInformation, 12);
+    expect(integrate(weightedOverY, grid.dy)).toBeCloseTo(grid.mutualInformation, 12);
+  });
+
+  it("caps fixed profile scales so sharp conditionals do not flatten the marginals", () => {
+    const grid = model("noisy-parabola", { a: 1, sigma: 0.08 }, 384);
+    let marginalMaximumX = 0;
+    let marginalMaximumY = 0;
+    let conditionalMaximumX = 0;
+    for (let ix = 0; ix < grid.nx; ix += 1) {
+      if (grid.x[ix] >= grid.displayDomain.x[0] && grid.x[ix] <= grid.displayDomain.x[1]) {
+        marginalMaximumX = Math.max(marginalMaximumX, grid.marginalX[ix]);
+      }
+    }
+    for (let iy = 0; iy < grid.ny; iy += 1) {
+      const yVisible = grid.y[iy] >= grid.displayDomain.y[0] && grid.y[iy] <= grid.displayDomain.y[1];
+      if (yVisible) marginalMaximumY = Math.max(marginalMaximumY, grid.marginalY[iy]);
+      if (!yVisible || grid.marginalY[iy] === 0) continue;
+      for (let ix = 0; ix < grid.nx; ix += 1) {
+        if (grid.x[ix] >= grid.displayDomain.x[0] && grid.x[ix] <= grid.displayDomain.x[1]) {
+          conditionalMaximumX = Math.max(
+            conditionalMaximumX,
+            grid.joint[iy * grid.nx + ix] / grid.marginalY[iy],
+          );
+        }
+      }
+    }
+
+    expect(grid.profileMaxX).toBeGreaterThanOrEqual(marginalMaximumX);
+    expect(grid.profileMaxY).toBeGreaterThanOrEqual(marginalMaximumY);
+    expect(grid.profileMaxX).toBeLessThanOrEqual(
+      marginalMaximumX * MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO * (1 + 1e-12),
+    );
+    expect(grid.profileMaxY).toBeLessThanOrEqual(
+      marginalMaximumY * MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO * (1 + 1e-12),
+    );
+    expect(conditionalMaximumX).toBeGreaterThan(grid.profileMaxX);
+  });
+
   it("finds zero covariance but positive MI for nonlinear families", () => {
     const parabola = model("noisy-parabola", { a: 1, sigma: 0.2 });
     const ring = model("noisy-ring", { R: 1, s: 0.2 });
@@ -152,10 +313,14 @@ describe("NHANES adult height and weight", () => {
 
   it("uses the weighted marginal percentile window and remains dependent", () => {
     const grid = model("nhanes-adults", { smoothing: 1 }, 384);
-    expect(grid.domain.x[0]).toBeCloseTo(NHANES_HEIGHT_P005_CM / 2.54, 10);
-    expect(grid.domain.x[1]).toBeCloseTo(NHANES_HEIGHT_P995_CM / 2.54, 10);
-    expect(grid.domain.y[0]).toBeCloseTo(NHANES_WEIGHT_P005_KG * 2.2046226218, 10);
-    expect(grid.domain.y[1]).toBeCloseTo(NHANES_WEIGHT_P995_KG * 2.2046226218, 10);
+    expect(grid.domain.x[0]).toBeCloseTo(NHANES_HEIGHT_DOMAIN[0] / 2.54, 10);
+    expect(grid.domain.x[1]).toBeCloseTo(NHANES_HEIGHT_DOMAIN[1] / 2.54, 10);
+    expect(grid.domain.y[0]).toBeCloseTo(NHANES_WEIGHT_DOMAIN[0] * 2.2046226218, 10);
+    expect(grid.domain.y[1]).toBeCloseTo(NHANES_WEIGHT_DOMAIN[1] * 2.2046226218, 10);
+    expect(grid.displayDomain.x[0]).toBeGreaterThan(grid.domain.x[0]);
+    expect(grid.displayDomain.x[1]).toBeLessThan(grid.domain.x[1]);
+    expect(grid.displayDomain.y[0]).toBeGreaterThan(grid.domain.y[0]);
+    expect(grid.displayDomain.y[1]).toBeLessThan(grid.domain.y[1]);
     expect(grid.mutualInformation).toBeGreaterThan(0.1);
   });
 

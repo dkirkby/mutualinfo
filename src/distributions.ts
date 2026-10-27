@@ -1,18 +1,14 @@
 import {
-  NHANES_HEIGHT_P005_CM,
-  NHANES_HEIGHT_P995_CM,
-  NHANES_WEIGHT_P005_KG,
-  NHANES_WEIGHT_P995_KG,
+  NHANES_HEIGHT_DOMAIN,
+  NHANES_WEIGHT_DOMAIN,
   NHANES_WEIGHTED_MEAN_HEIGHT_CM,
   NHANES_WEIGHTED_MEAN_WEIGHT_KG,
 } from "./data/nhanesHeightWeight";
 import {
+  NOAA_NINO34_HISTOGRAM_DOMAIN,
   NOAA_NINO34_MEAN_C,
-  NOAA_NINO34_P005_C,
-  NOAA_NINO34_P995_C,
+  NOAA_SOI_HISTOGRAM_DOMAIN,
   NOAA_SOI_MEAN,
-  NOAA_SOI_P005,
-  NOAA_SOI_P995,
 } from "./data/noaaEnso";
 import { climateLogDensity } from "./climate";
 import { nhanesLogDensity } from "./nhanes";
@@ -217,8 +213,8 @@ export const distributions: DistributionDefinition[] = [
       y: NHANES_WEIGHTED_MEAN_WEIGHT_KG * POUNDS_PER_KG,
     },
     domain: () => ({
-      x: [NHANES_HEIGHT_P005_CM / CM_PER_INCH, NHANES_HEIGHT_P995_CM / CM_PER_INCH],
-      y: [NHANES_WEIGHT_P005_KG * POUNDS_PER_KG, NHANES_WEIGHT_P995_KG * POUNDS_PER_KG],
+      x: [NHANES_HEIGHT_DOMAIN[0] / CM_PER_INCH, NHANES_HEIGHT_DOMAIN[1] / CM_PER_INCH],
+      y: [NHANES_WEIGHT_DOMAIN[0] * POUNDS_PER_KG, NHANES_WEIGHT_DOMAIN[1] * POUNDS_PER_KG],
     }),
     logDensity: (heightInches, weightPounds, { smoothing }) =>
       nhanesLogDensity(heightInches * CM_PER_INCH, weightPounds / POUNDS_PER_KG, smoothing),
@@ -259,8 +255,8 @@ export const distributions: DistributionDefinition[] = [
     },
     initialPoint: { x: NOAA_NINO34_MEAN_C, y: NOAA_SOI_MEAN },
     domain: () => ({
-      x: [NOAA_NINO34_P005_C, NOAA_NINO34_P995_C],
-      y: [NOAA_SOI_P005, NOAA_SOI_P995],
+      x: NOAA_NINO34_HISTOGRAM_DOMAIN,
+      y: NOAA_SOI_HISTOGRAM_DOMAIN,
     }),
     logDensity: (ninoAnomaly, soiValue, { lag }) =>
       climateLogDensity(ninoAnomaly, soiValue, lag),

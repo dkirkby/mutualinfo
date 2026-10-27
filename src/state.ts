@@ -14,10 +14,10 @@ export interface ExplorerState {
 
 export function createInitialState(): ExplorerState {
   return {
-    family: "independent-gaussian",
+    family: "correlated-gaussian",
     parameters: defaultParameters(),
     selectedPoint: { x: 0, y: 0 },
-    informationWeighted: false,
+    informationWeighted: true,
   };
 }
 

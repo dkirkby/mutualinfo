@@ -81,8 +81,8 @@ export class Heatmap {
 
   setModel(model: GridModel): void {
     this.model = model;
-    this.xScale.domain(model.domain.x);
-    this.yScale.domain(model.domain.y);
+    this.xScale.domain(model.displayDomain.x);
+    this.yScale.domain(model.displayDomain.y);
     this.raster = this.createRaster(model);
     this.resize();
   }
@@ -201,7 +201,33 @@ export class Heatmap {
     if (context && this.raster) {
       context.clearRect(0, 0, this.canvas.width, this.canvas.height);
       context.imageSmoothingEnabled = true;
-      context.drawImage(this.raster, 0, 0, this.canvas.width, this.canvas.height);
+      const sourceX =
+        ((this.model.displayDomain.x[0] - this.model.domain.x[0]) /
+          (this.model.domain.x[1] - this.model.domain.x[0])) *
+        this.model.nx;
+      const sourceWidth =
+        ((this.model.displayDomain.x[1] - this.model.displayDomain.x[0]) /
+          (this.model.domain.x[1] - this.model.domain.x[0])) *
+        this.model.nx;
+      const sourceY =
+        ((this.model.domain.y[1] - this.model.displayDomain.y[1]) /
+          (this.model.domain.y[1] - this.model.domain.y[0])) *
+        this.model.ny;
+      const sourceHeight =
+        ((this.model.displayDomain.y[1] - this.model.displayDomain.y[0]) /
+          (this.model.domain.y[1] - this.model.domain.y[0])) *
+        this.model.ny;
+      context.drawImage(
+        this.raster,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        this.canvas.width,
+        this.canvas.height,
+      );
     }
 
     this.svg.attr("viewBox", `0 0 ${this.width} ${this.height}`);
@@ -283,8 +309,14 @@ export class Heatmap {
     else if (event.key === "ArrowUp") point.y += this.model.dy * multiplier;
     else return;
     event.preventDefault();
-    point.x = Math.max(this.model.domain.x[0], Math.min(this.model.domain.x[1], point.x));
-    point.y = Math.max(this.model.domain.y[0], Math.min(this.model.domain.y[1], point.y));
+    point.x = Math.max(
+      this.model.displayDomain.x[0],
+      Math.min(this.model.displayDomain.x[1], point.x),
+    );
+    point.y = Math.max(
+      this.model.displayDomain.y[0],
+      Math.min(this.model.displayDomain.y[1], point.y),
+    );
     this.options.onSelect(point);
   }
 }

@@ -1,9 +1,11 @@
 import type { DistributionDefinition, Domain2D, Parameters } from "./distributions";
 
 const LOG_2 = Math.log(2);
+export const MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO = 3;
 
 export interface GridModel {
   domain: Domain2D;
+  displayDomain: Domain2D;
   nx: number;
   ny: number;
   dx: number;
@@ -17,8 +19,14 @@ export interface GridModel {
   information: Float64Array;
   informationContribution: Float64Array;
   informationContributionMax: number;
+  klXGivenY: Float64Array;
+  klYGivenX: Float64Array;
+  profileMaxX: number;
+  profileMaxY: number;
   densityMax: number;
   jointMax: number;
+  entropyX: number;
+  entropyY: number;
   mutualInformation: number;
   massBeforeNormalization: number;
 }
@@ -46,11 +54,38 @@ function centeredCoordinates([minimum, maximum]: [number, number], count: number
   return Float64Array.from({ length: count }, (_, index) => minimum + (index + 0.5) * step);
 }
 
+function marginalQuantile(
+  marginal: Float64Array,
+  domain: [number, number],
+  spacing: number,
+  quantile: number,
+): number {
+  let cumulative = 0;
+  for (let index = 0; index < marginal.length; index += 1) {
+    const mass = marginal[index] * spacing;
+    if (cumulative + mass >= quantile && mass > 0) {
+      const fraction = (quantile - cumulative) / mass;
+      return domain[0] + (index + fraction) * spacing;
+    }
+    cumulative += mass;
+  }
+  return domain[1];
+}
+
 function productInformation(joint: number, product: number): number {
   if (joint > 0 && product > 0) return Math.log(joint / product) / LOG_2;
   if (joint === 0 && product > 0) return Number.NEGATIVE_INFINITY;
   if (joint > 0 && product === 0) return Number.POSITIVE_INFINITY;
   return Number.NaN;
+}
+
+function gridEntropy(marginal: Float64Array, spacing: number): number {
+  let entropy = 0;
+  for (const density of marginal) {
+    const probability = density * spacing;
+    if (probability > 0) entropy -= probability * (Math.log(probability) / LOG_2);
+  }
+  return entropy;
 }
 
 export function computeGrid(
@@ -109,10 +144,29 @@ export function computeGrid(
     }
   }
 
+  const displayDomain: Domain2D = {
+    x: [
+      marginalQuantile(marginalX, domain.x, dx, 0.005),
+      marginalQuantile(marginalX, domain.x, dx, 0.995),
+    ],
+    y: [
+      marginalQuantile(marginalY, domain.y, dy, 0.005),
+      marginalQuantile(marginalY, domain.y, dy, 0.995),
+    ],
+  };
+  const entropyX = gridEntropy(marginalX, dx);
+  const entropyY = gridEntropy(marginalY, dy);
+
   const product = new Float64Array(cellCount);
   const information = new Float64Array(cellCount);
   const informationContribution = new Float64Array(cellCount);
+  const klXGivenY = new Float64Array(ny);
+  const klYGivenX = new Float64Array(nx);
   let informationContributionMax = 0;
+  let profileMaxX = 0;
+  let profileMaxY = 0;
+  let marginalProfileMaxX = 0;
+  let marginalProfileMaxY = 0;
   let densityMax = jointMax;
   let mutualInformation = 0;
   const cellArea = dx * dy;
@@ -129,14 +183,50 @@ export function computeGrid(
         informationContribution[index] = contribution;
         informationContributionMax = Math.max(informationContributionMax, Math.abs(contribution));
         mutualInformation += contribution * cellArea;
+        if (marginalY[iy] > 0) klXGivenY[iy] += (contribution / marginalY[iy]) * dx;
+        if (marginalX[ix] > 0) klYGivenX[ix] += (contribution / marginalX[ix]) * dy;
+      }
+      // Include the cells bracketing the visible bounds so clipped SVG line
+      // segments and interpolated selections cannot exceed the fixed scale.
+      const xVisible = x[ix] >= displayDomain.x[0] - dx && x[ix] <= displayDomain.x[1] + dx;
+      const yVisible = y[iy] >= displayDomain.y[0] - dy && y[iy] <= displayDomain.y[1] + dy;
+      if (xVisible && yVisible) {
+        if (marginalY[iy] > 0) profileMaxX = Math.max(profileMaxX, joint[index] / marginalY[iy]);
+        if (marginalX[ix] > 0) profileMaxY = Math.max(profileMaxY, joint[index] / marginalX[ix]);
       }
     }
   }
 
+  for (let ix = 0; ix < nx; ix += 1) {
+    if (x[ix] >= displayDomain.x[0] && x[ix] <= displayDomain.x[1]) {
+      marginalProfileMaxX = Math.max(marginalProfileMaxX, marginalX[ix]);
+    }
+  }
+  for (let iy = 0; iy < ny; iy += 1) {
+    if (y[iy] >= displayDomain.y[0] && y[iy] <= displayDomain.y[1]) {
+      marginalProfileMaxY = Math.max(marginalProfileMaxY, marginalY[iy]);
+    }
+  }
+  profileMaxX = Math.max(
+    marginalProfileMaxX,
+    Math.min(profileMaxX, marginalProfileMaxX * MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO),
+  );
+  profileMaxY = Math.max(
+    marginalProfileMaxY,
+    Math.min(profileMaxY, marginalProfileMaxY * MAX_CONDITIONAL_TO_MARGINAL_PROFILE_RATIO),
+  );
+
   if (mutualInformation < 0 && mutualInformation > -1e-12) mutualInformation = 0;
+  for (let iy = 0; iy < ny; iy += 1) {
+    if (klXGivenY[iy] < 0 && klXGivenY[iy] > -1e-12) klXGivenY[iy] = 0;
+  }
+  for (let ix = 0; ix < nx; ix += 1) {
+    if (klYGivenX[ix] < 0 && klYGivenX[ix] > -1e-12) klYGivenX[ix] = 0;
+  }
 
   return {
     domain,
+    displayDomain,
     nx,
     ny,
     dx,
@@ -150,8 +240,14 @@ export function computeGrid(
     information,
     informationContribution,
     informationContributionMax,
+    klXGivenY,
+    klYGivenX,
+    profileMaxX,
+    profileMaxY,
     densityMax,
     jointMax,
+    entropyX,
+    entropyY,
     mutualInformation,
     massBeforeNormalization,
   };
@@ -308,17 +404,11 @@ export function integrate(values: Float64Array, spacing: number): number {
 export function weightedConditionalAverages(model: GridModel): { overX: number; overY: number } {
   let overX = 0;
   for (let ix = 0; ix < model.nx; ix += 1) {
-    const slice = conditionalYAtX(model, model.x[ix]);
-    if (slice.klDivergence !== null) {
-      overX += model.marginalX[ix] * slice.klDivergence * model.dx;
-    }
+    overX += model.marginalX[ix] * model.klYGivenX[ix] * model.dx;
   }
   let overY = 0;
   for (let iy = 0; iy < model.ny; iy += 1) {
-    const slice = conditionalXAtY(model, model.y[iy]);
-    if (slice.klDivergence !== null) {
-      overY += model.marginalY[iy] * slice.klDivergence * model.dy;
-    }
+    overY += model.marginalY[iy] * model.klXGivenY[iy] * model.dy;
   }
   return { overX, overY };
 }
