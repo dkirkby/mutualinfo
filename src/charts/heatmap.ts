@@ -38,6 +38,7 @@ export class Heatmap {
   private height = 320;
   private activePointer: number | null = null;
   private resizeFrame: number | null = null;
+  private readonly resizeObserver: ResizeObserver | null;
   private xTickFormat: ((value: number) => string) | undefined;
   private yTickFormat: ((value: number) => string) | undefined;
   private informationWeighted = false;
@@ -76,6 +77,11 @@ export class Heatmap {
       .attr("aria-label", `${options.accessibleName}. Use arrow keys to move the selected point.`);
 
     this.bindInteraction();
+    this.resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => this.scheduleResize());
+    this.resizeObserver?.observe(this.stage);
     window.addEventListener("resize", () => this.scheduleResize());
   }
 
@@ -182,9 +188,11 @@ export class Heatmap {
 
   private resize(): void {
     if (!this.model) return;
-    const stageWidth = Math.max(260, this.stage.clientWidth || 320);
+    const stageBounds = this.stage.getBoundingClientRect();
+    const stageWidth = Math.max(260, stageBounds.width || this.stage.clientWidth || 320);
+    const stageHeight = Math.max(220, stageBounds.height || this.stage.clientHeight || stageWidth);
     this.width = stageWidth;
-    this.height = stageWidth;
+    this.height = stageHeight;
     const innerWidth = this.width - this.margin.left - this.margin.right;
     const innerHeight = this.height - this.margin.top - this.margin.bottom;
     this.xScale.range([this.margin.left, this.margin.left + innerWidth]);

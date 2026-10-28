@@ -1,5 +1,7 @@
 # Mutual Information Explorer
 
+[Open the live explorer on GitHub Pages](https://dkirkby.github.io/mutualinfo/)
+
 A static, client-side visualization connecting two views of mutual information:
 
 - how a joint density differs from the independent reference `p(x)p(y)`; and
