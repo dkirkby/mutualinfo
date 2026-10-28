@@ -52,7 +52,10 @@ export class Heatmap {
     this.canvas = document.createElement("canvas");
     this.canvas.setAttribute("aria-hidden", "true");
     this.svg = d3.select(document.createElementNS("http://www.w3.org/2000/svg", "svg"));
-    this.svg.attr("role", "group").attr("aria-label", options.accessibleName);
+    this.svg
+      .attr("role", "group")
+      .attr("aria-label", options.accessibleName)
+      .attr("preserveAspectRatio", "none");
     this.stage.append(this.canvas, this.svg.node() as SVGSVGElement);
     this.host.append(this.stage);
 
@@ -198,13 +201,19 @@ export class Heatmap {
     this.xScale.range([this.margin.left, this.margin.left + innerWidth]);
     this.yScale.range([this.margin.top + innerHeight, this.margin.top]);
 
+    // Keep the canvas and SVG in the same full-stage CSS box. Drawing the
+    // raster at the plot margins in backing-store coordinates avoids the two
+    // independently positioned layers drifting when the responsive grid
+    // settles to a non-square size.
     const devicePixelRatio = window.devicePixelRatio || 1;
-    this.canvas.width = Math.round(innerWidth * devicePixelRatio);
-    this.canvas.height = Math.round(innerHeight * devicePixelRatio);
-    this.canvas.style.left = `${this.margin.left}px`;
-    this.canvas.style.top = `${this.margin.top}px`;
-    this.canvas.style.width = `${innerWidth}px`;
-    this.canvas.style.height = `${innerHeight}px`;
+    this.canvas.width = Math.round(this.width * devicePixelRatio);
+    this.canvas.height = Math.round(this.height * devicePixelRatio);
+    const backingScaleX = this.canvas.width / this.width;
+    const backingScaleY = this.canvas.height / this.height;
+    const destinationX = this.margin.left * backingScaleX;
+    const destinationY = this.margin.top * backingScaleY;
+    const destinationWidth = innerWidth * backingScaleX;
+    const destinationHeight = innerHeight * backingScaleY;
     const context = this.canvas.getContext("2d");
     if (context && this.raster) {
       context.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -231,10 +240,10 @@ export class Heatmap {
         sourceY,
         sourceWidth,
         sourceHeight,
-        0,
-        0,
-        this.canvas.width,
-        this.canvas.height,
+        destinationX,
+        destinationY,
+        destinationWidth,
+        destinationHeight,
       );
     }
 

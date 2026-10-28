@@ -32,6 +32,7 @@ export class ProjectionChart {
   private conditionalMaximum = Number.POSITIVE_INFINITY;
   private displayDomain: [number, number] = [0, 1];
   private resizeFrame: number | null = null;
+  private readonly resizeObserver: ResizeObserver | null;
 
   constructor(host: HTMLElement, options: ProjectionChartOptions) {
     this.host = host;
@@ -41,7 +42,8 @@ export class ProjectionChart {
     this.svg = d3
       .select(document.createElementNS("http://www.w3.org/2000/svg", "svg"))
       .attr("role", "img")
-      .attr("aria-label", options.accessibleName);
+      .attr("aria-label", options.accessibleName)
+      .attr("preserveAspectRatio", "none");
     this.host.append(this.svg.node() as SVGSVGElement);
     this.svg.append("defs").append("clipPath").attr("id", this.clipId).append("rect");
     this.plot = this.svg.append("g").attr("clip-path", `url(#${this.clipId})`);
@@ -65,6 +67,11 @@ export class ProjectionChart {
       .append("text")
       .attr("class", "projection-label")
       .text(options.label ?? (options.orientation === "horizontal" ? "p(x)" : "p(y)"));
+    this.resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => this.scheduleResize());
+    this.resizeObserver?.observe(this.host);
     window.addEventListener("resize", () => this.scheduleResize());
   }
 
